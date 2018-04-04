@@ -16,6 +16,10 @@ namespace HDB2AQDB
         static string aqSrvr = Environment.MachineName;
         static string aqUser;
         static string aqPswd;
+        public static string hdbUserReader;
+        public static string hdbPswdReader;
+        public static string hdbUserWriter;
+        public static string hdbPswdWriter;
         static RestClient acquisitionClient;
         static RestClient publishClient;
         static RestClient provisionClient;
@@ -27,46 +31,72 @@ namespace HDB2AQDB
         // HDB GLOBAL VARIABLES
         static string hdb, sdID, interval;
         static DateTime startDate, endDate;
-        static string sID, dID, siteCommonName, siteName, siteType, datatype, physQuantityName, units, locLat, locLon, state, dbRegion;
         static int okCount = 0, failCount = 0, appendCount = 0, utcConversion = 8;
 
         // SYNC PROGRAM VARIABLES
-        static List<string> hdbValues = new List<string> { "LCHDB2", "YAOHDB", "UCHDB2" };
+        static List<string> hdbValues = new List<string> { "LCHDB2", "YAOHDB", "UCHDB2", "LCHDEV" };
         static List<string> processValues = new List<string> { "READ", "WRITE", "BOTH" };
         static Logger logFile = new Logger();
         static int pointCount;
         static List<IRestResponse> appendRequestIds = new List<IRestResponse>();
-        static string aquasOutputDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);//@"C:\Users\jrocha\Desktop\WebTemplates\AquariusApprovalStatus\";
+        static string aquasOutputDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 
         // BUILD VARIABLES
         static bool jrDEBUG = false;
 
 
         /// <summary>
+        /// Help for command line program
+        /// </summary>
+        static void ShowHelp()
+        {
+            Console.WriteLine("------------------------------------------------------------");
+            Console.WriteLine("HDB to Aquarius Manual Data Transfer");
+            Console.WriteLine("");
+            Console.WriteLine("--aqdataupdate");
+            Console.WriteLine("      tells the program to run DRADI in data update mode");
+            Console.WriteLine("--auto");
+            Console.WriteLine("      tells the program to run DRADI in auto mode");
+            Console.WriteLine("--manual");
+            Console.WriteLine("      tells the program to run DRADI manually using the inputs below");
+            Console.WriteLine("--sdid=[X]");
+            Console.WriteLine("      with [X] as the required SDID to update or ALL for all SDIDs");
+            Console.WriteLine("--tStart=[X]");
+            Console.WriteLine("      with [X] as a valid date in YYYY-MM-DD format");
+            Console.WriteLine("--tEnd=[X]");
+            Console.WriteLine("      with [X] as a valid date in YYYY-MM-DD format");
+            Console.WriteLine("      When performing data updates on newly added SDIDs, Aquarius");
+            Console.WriteLine("         can only process/transfer up to 3 years' worth of data so the");
+            Console.WriteLine("         date range from tStart to tEnd should be no more that 3 years apart");
+            Console.WriteLine("");
+            Console.WriteLine("Sample Usage:");
+            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=1930 --tStart=2017-01-01");
+            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=ALL --tStart=2017-01-01");
+            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=2089 --tStart=2012-01-01 --tEnd=2014-01-01");
+            Console.WriteLine("DRADI --aqdataupdate --auto");
+            Console.WriteLine("");
+            Console.WriteLine("------------------------------------------------------------");
+            Console.WriteLine("");
+            Console.WriteLine("Aquarius Approval Status (AquAS)");
+            Console.WriteLine("--getapprovals");
+            Console.WriteLine("      builds the files needed by the AquAS UI");
+            Console.WriteLine("");
+            Console.WriteLine("Sample Usage:");
+            Console.WriteLine("DRADI --getapprovals");
+            Console.WriteLine("");
+            Console.WriteLine("------------------------------------------------------------");
+            Console.WriteLine("Press ENTER to continue... ");
+            Console.ReadLine();
+        }
+
+
+        /// <summary>
         /// JR TEST
         /// </summary>
-        static void MainTest()
+        static void MainTEST()
         {
-            // Hard coded default start date per BHO
-            startDate = new DateTime(2012, 1, 1, 0, 0, 0);
-            endDate = DateTime.Now;
-            // Transfer 3-year chunks of data
-            if ((endDate.Year - startDate.Year) >= 3)
-            {
-                var chunkCount = System.Math.Ceiling((endDate.Year - startDate.Year) / 3.0);
-                for (int i = 0; i < chunkCount; i++)
-                {
-                    DateTime ithStartDate = startDate.AddYears(3 * i);
-                    DateTime ithEndDate = startDate.AddYears(3 + (3 * i));
-                    if (ithEndDate > endDate)
-                    { ithEndDate = endDate; }
-                    //ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
-                }
-            }
-            else
-            {
-                //ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
-            }
+            GetCredentials();
+            //HdbWrite.PutHdbData("lchdb2", 1202, "month", new DateTime(2017, 10, 1), 5.0);
         }
 
 
@@ -357,22 +387,26 @@ namespace HDB2AQDB
         {
             try
             {
-                var path = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory.ToString(), "credentials.txt");// Path.Combine(Directory.GetCurrentDirectory(), "\\credentials.txt");
+                var path = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory.ToString(), "credentials.txt");
                 string[] text = File.ReadAllLines(path);
-                HdbQuery.dbUser = text[0].Split('=')[1].ToString();
-                HdbQuery.dbPass = text[1].Split('=')[1].ToString();
+                hdbUserReader = text[0].Split('=')[1].ToString();
+                hdbPswdReader = text[1].Split('=')[1].ToString();
                 aqUser = text[2].Split('=')[1].ToString();
                 aqPswd = text[3].Split('=')[1].ToString();
+                hdbUserWriter = text[4].Split('=')[1].ToString();
+                hdbPswdWriter = text[5].Split('=')[1].ToString();
             }
             catch
             {
                 Console.WriteLine("Textfile containing HDB & Aquarius credentials not found...");
                 Console.WriteLine("\tcredentials.txt has to be in the same folder as the executable ");
                 Console.WriteLine("\tprogram and should contain:");
-                Console.WriteLine("\thdbUser=XXXXX");
-                Console.WriteLine("\thdbPass=XXXXX");
+                Console.WriteLine("\thdbUser-Read=XXXXX");
+                Console.WriteLine("\thdbPass-Read=XXXXX");
                 Console.WriteLine("\taquUser=XXXXX");
                 Console.WriteLine("\taquPass=XXXXX");
+                Console.WriteLine("\thdbUser-Write=XXXXX");
+                Console.WriteLine("\thdbPass-Write=XXXXX");
                 Console.WriteLine("");
             }
         }
@@ -452,25 +486,14 @@ namespace HDB2AQDB
         /// <summary>
         /// Get TS items from AQ
         /// </summary>
-        private static tsInventory GetAqTimeSeries()
+        private static tsInventory GetAqTimeSeries(bool getPublishedTS = false)
         {
             // Get available Locations
             var request = new RestRequest("GetTimeSeriesDescriptionList/", Method.GET);
-            request = AuthorizeRequest(request);
-            IRestResponse restResponse = publishClient.Execute(request);
-            ValidateResponse(restResponse, "List of Aquarius TS objects fetched");
-            return JsonConvert.DeserializeObject<tsInventory>(restResponse.Content);
-        }
-
-
-        /// <summary>
-        /// Get TS items from AQ
-        /// </summary>
-        private static tsInventory GetAqTimeSeries(bool getPublishedTS)
-        {
-            // Get available Locations
-            var request = new RestRequest("GetTimeSeriesDescriptionList/", Method.GET);
-            request.AddParameter("Publish", getPublishedTS);
+            if (getPublishedTS)
+            {
+                request.AddParameter("Publish", getPublishedTS);
+            }
             request = AuthorizeRequest(request);
             IRestResponse restResponse = publishClient.Execute(request);
             ValidateResponse(restResponse, "List of Aquarius TS objects fetched");
@@ -555,7 +578,7 @@ namespace HDB2AQDB
 
             if (dataPoints == "[{}]")
             {
-                logFile.Log(" FAIL  HDB Error: No data found for " + sdID + " in " + hdb);
+                logFile.Log(" FAIL HDB Error: No data found for " + sdID + " in " + hdb);
                 failCount++;
             }
             else
@@ -716,51 +739,6 @@ namespace HDB2AQDB
 
 
         /// <summary>
-        /// Help for command line program
-        /// </summary>
-        static void ShowHelp()
-        {
-            Console.WriteLine("------------------------------------------------------------");
-            Console.WriteLine("HDB to Aquarius Manual Data Transfer");
-            Console.WriteLine("");
-            Console.WriteLine("--aqdataupdate");
-            Console.WriteLine("      tells the program to run DRADI in data update mode");
-            Console.WriteLine("--auto");
-            Console.WriteLine("      tells the program to run DRADI in auto mode");
-            Console.WriteLine("--manual");
-            Console.WriteLine("      tells the program to run DRADI manually using the inputs below");
-            Console.WriteLine("--sdid=[X]");
-            Console.WriteLine("      with [X] as the required SDID to update or ALL for all SDIDs");
-            Console.WriteLine("--tStart=[X]");
-            Console.WriteLine("      with [X] as a valid date in YYYY-MM-DD format");
-            Console.WriteLine("--tEnd=[X]");
-            Console.WriteLine("      with [X] as a valid date in YYYY-MM-DD format");
-            Console.WriteLine("      When performing data updates on newly added SDIDs, Aquarius");
-            Console.WriteLine("         can only process/transfer up to 3 years' worth of data so the");
-            Console.WriteLine("         date range from tStart to tEnd should be no more that 3 years apart");
-            Console.WriteLine("");
-            Console.WriteLine("Sample Usage:");
-            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=1930 --tStart=2017-01-01");
-            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=ALL --tStart=2017-01-01");
-            Console.WriteLine("DRADI --aqdataupdate --manual --sdid=2089 --tStart=2012-01-01 --tEnd=2014-01-01");
-            Console.WriteLine("DRADI --aqdataupdate --auto");
-            Console.WriteLine("");
-            Console.WriteLine("------------------------------------------------------------");
-            Console.WriteLine("");
-            Console.WriteLine("Aquarius Approval Status (AquAS)");
-            Console.WriteLine("--getapprovals");
-            Console.WriteLine("      builds the files needed by the AquAS UI");
-            Console.WriteLine("");
-            Console.WriteLine("Sample Usage:");
-            Console.WriteLine("DRADI --getapprovals");
-            Console.WriteLine("");
-            Console.WriteLine("------------------------------------------------------------");
-            Console.WriteLine("Press ENTER to continue... ");
-            Console.ReadLine();
-        }
-
-
-        /// <summary>
         /// Builds the text files required by the AquAS UI
         /// </summary>
         /// <param name="tsItems"></param>
@@ -882,51 +860,7 @@ namespace HDB2AQDB
             }
         }
 
-
-
-    }
-
-    class Utilities
-    {
-        /// <summary>
-        /// Checks the query string
-        /// </summary>
-        /// <param name="query"></param>
-        /// <returns></returns>
-        private static bool ValidateQuery(string query)
-        { return Regex.IsMatch(query, "[^A-Za-z0-9=&%+-/_]"); }
-
-
-        /// <summary>
-        /// Reads the query (Get or Post) and generates a query string for the program
-        /// </summary>
-        /// <returns></returns>
-        private static string GetQuery()
-        {
-            // Construct search string
-            string srchString = "";
-            var method = System.Environment.GetEnvironmentVariable("REQUEST_METHOD");
-            if (method == null)
-            { return ""; }
-            if (method.Equals("POST")) //POST Method
-            {
-                string PostedData = "";
-                int PostedDataLength = Convert.ToInt32(System.Environment.GetEnvironmentVariable("CONTENT_LENGTH"));
-                if (PostedDataLength > 2048) PostedDataLength = 2048;   // Max length for POST data (security limit)
-                for (int i = 0; i < PostedDataLength; i++)
-                { PostedData += Convert.ToChar(Console.Read()).ToString(); }
-                srchString = "?" + PostedData;
-            }
-            else //GET Method
-            { srchString = "?" + System.Environment.GetEnvironmentVariable("QUERY_STRING"); }
-            // Sanitize query string. [JR] Update code here to catch other dangerous characters
-            srchString = srchString.Replace("&#39", ""); // Remove HTML '
-            srchString = srchString.Replace("%27", ""); // Remove HEX '
-            srchString = srchString.Replace("%&#44", ","); // Replace HTML ,
-            srchString = srchString.Replace("%2C", ","); // Replace HEX ,
-            return srchString;
-        }
-
+        
     }
 }
 

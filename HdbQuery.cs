@@ -2,7 +2,7 @@
 using System.Net;
 using System.Data;
 using System.Linq;
-using System.Data.OracleClient;
+using Oracle.ManagedDataAccess.Client;
 using System.Collections.Generic;
 
 namespace HDB2AQDB
@@ -11,10 +11,37 @@ namespace HDB2AQDB
     {
         // Search for [JR] tag to find areas that could use some work
         private static bool jrDebug = false;
-        // These are the DB log-in information
+
         private static string dbServer;
-        public static string dbUser;
-        public static string dbPass;
+        private static string dbUser = Program.hdbUserReader;
+        public static string dbPass = Program.hdbPswdReader;
+
+
+        /// <summary>
+        /// Connects to HDB
+        /// </summary>
+        /// <returns></returns>
+        private static OracleConnection ConnectHDB()
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////
+            // Open Oracle DB connections
+            if (jrDebug)
+            { Console.Write("Connecting to HDB... "); }
+            OracleConnection dbConx = new OracleConnection();
+            dbConx.ConnectionString = "Data Source=" + dbServer + ";User Id=" + dbUser + ";Password=" + dbServer.ToLower() + ";";
+            dbConx.Open();
+            if (jrDebug)
+            { Console.WriteLine("Success!"); }
+            return dbConx;
+        }
+
+
+        /// <summary>
+        /// Disconnects HDB
+        /// </summary>
+        /// <param name="conx"></param>
+        private static void DisconnectHDB(OracleConnection conx)
+        { conx.Dispose(); }
 
 
         public static DataTable GetHdbData(string hdb, string sdiValue, string interval, DateTime startDate, DateTime endDate, bool web = false)
@@ -190,33 +217,6 @@ namespace HDB2AQDB
             DisconnectHDB(oDB);
             return dTab;
         }
-
-
-        /// <summary>
-        /// Connects to HDB
-        /// </summary>
-        /// <returns></returns>
-        private static OracleConnection ConnectHDB()
-        {
-            ///////////////////////////////////////////////////////////////////////////////////////////////
-            // Open Oracle DB connections
-            if (jrDebug)
-            { Console.Write("Connecting to HDB... "); }
-            OracleConnection dbConx = new OracleConnection();
-            dbConx.ConnectionString = "Data Source=" + dbServer + ";User Id=" + dbUser + ";Password=" + dbServer.ToLower() + ";";
-            dbConx.Open();
-            if (jrDebug)
-            { Console.WriteLine("Success!"); }
-            return dbConx;
-        }
-
-
-        /// <summary>
-        /// Disconnects HDB
-        /// </summary>
-        /// <param name="conx"></param>
-        private static void DisconnectHDB(OracleConnection conx)
-        { conx.Dispose(); }
 
 
         /// <summary>
