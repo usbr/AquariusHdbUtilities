@@ -5,3 +5,4 @@ The code uses the built-in Aquarius API end-points to perform Aquarius operation
 * [RestSharp](https://github.com/restsharp/RestSharp)
 * [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json)
 * [Reclamation.TimeSeries](https://github.com/usbr/Pisces)
+* [Oracle.ManagedDataAccess](https://www.nuget.org/packages/Oracle.ManagedDataAccess/)
