@@ -13,32 +13,32 @@ namespace HDB2AQDB
     class Program
     {
         // AQUARIUS GLOBAL VARIABLES
-        static string aqSrvr = Environment.MachineName;
-        static string aqUser;
-        static string aqPswd;
+        public static string aqSrvr = Environment.MachineName;
+        public static string aqUser;
+        public static string aqPswd;
         public static string hdbUserReader;
         public static string hdbPswdReader;
         public static string hdbUserWriter;
         public static string hdbPswdWriter;
-        static RestClient acquisitionClient;
-        static RestClient publishClient;
-        static RestClient provisionClient;
-        static string acquisitionAPI = @"http://" + aqSrvr + ".bor.doi.net/AQUARIUS/Acquisition/v2";
-        static string publishAPI = @"http://" + aqSrvr + ".bor.doi.net/AQUARIUS/Publish/v2";
-        static string provisionAPI = @"http://" + aqSrvr + ".bor.doi.net/AQUARIUS/Provisioning/v1";
-        static string authToken;
+        public static string authToken;
+        public static RestClient acquisitionClient;
+        public static RestClient publishClient;
+        public static RestClient provisionClient;
+        public static string acquisitionAPI = @"http://" + Program.aqSrvr + ".bor.doi.net/AQUARIUS/Acquisition/v2";
+        public static string publishAPI = @"http://" + Program.aqSrvr + ".bor.doi.net/AQUARIUS/Publish/v2";
+        public static string provisionAPI = @"http://" + Program.aqSrvr + ".bor.doi.net/AQUARIUS/Provisioning/v1";
 
         // HDB GLOBAL VARIABLES
         static string hdb, sdID, interval;
         static DateTime startDate, endDate;
-        static int okCount = 0, failCount = 0, appendCount = 0, utcConversion = 8;
+        public static int okCount = 0, failCount = 0, appendCount = 0, utcConversion = 8;
 
         // SYNC PROGRAM VARIABLES
         static List<string> hdbValues = new List<string> { "LCHDB2", "YAOHDB", "UCHDB2", "LCHDEV" };
         static List<string> processValues = new List<string> { "READ", "WRITE", "BOTH" };
-        static Logger logFile = new Logger();
+        public static Logger logFile = new Logger();
         static int pointCount;
-        static List<IRestResponse> appendRequestIds = new List<IRestResponse>();
+        public static List<IRestResponse> appendRequestIds = new List<IRestResponse>();
         static string aquasOutputDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 
         // BUILD VARIABLES
@@ -143,14 +143,14 @@ namespace HDB2AQDB
             }
 
             // INITIALIZE CONNECTION
-            ConnectToAquarius();
+            authToken = AquQuery.ConnectToAquarius();
 
             tsInventory tsItems;
             // GET ALL TS ITEMS IN AQDB
             if (args.Contains("getapprovals"))
-            { tsItems = GetAqTimeSeries(true); }
+            { tsItems = AquQuery.GetAqTimeSeries(true); }
             else
-            { tsItems = GetAqTimeSeries(); }
+            { tsItems = AquQuery.GetAqTimeSeries(); }
 
             ///////////////////////////////////////////////////////////////////////
             // GET APPROVAL LEVELS IN AQDB
@@ -232,14 +232,14 @@ namespace HDB2AQDB
                                     endDate = origStart.AddYears(3 + (3 * i));
                                     if (startDate > origEnd)
                                     { endDate = origEnd; }
-                                    ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
+                                    AquWrite.ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
                                 }
                                 startDate = origStart;
                                 endDate = origEnd;
                             }
                             else
                             {
-                                ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
+                                AquWrite.ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
                             }
                         }
                         // TS EXISTS SO ONLY GET UPDATED DATA
@@ -266,14 +266,14 @@ namespace HDB2AQDB
                                         catch
                                         { endDate = DateTime.Now; }
                                         Console.Write("Filling SDID " + sdID + "... ");
-                                        ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
+                                        AquWrite.ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
                                         Console.WriteLine("Done!");
                                     }
                                 }
                             }
                             else if (args.Contains("auto"))
                             {
-                                ReflectedTimeSeriesOverWriteAppend(ts.UniqueId, true);
+                                AquWrite.ReflectedTimeSeriesOverWriteAppend(ts.UniqueId, true);
                             }
                             else
                             {
@@ -340,7 +340,7 @@ namespace HDB2AQDB
             }
 
             // DISCONNECT
-            DisconnectFromAquarius();
+            AquQuery.DisconnectFromAquarius();
         }
 
 
@@ -377,47 +377,11 @@ namespace HDB2AQDB
 
 
         /// <summary>
-        /// Connect to Aquarius DB server
-        /// </summary>
-        private static void ConnectToAquarius()
-        {
-            // Initialize Rest clients for connecting to AQ
-            acquisitionClient = new RestClient(acquisitionAPI);
-            publishClient = new RestClient(publishAPI);
-            provisionClient = new RestClient(provisionAPI);
-
-            // Define session variables for authentication
-            var request = new RestRequest("session/", Method.POST);
-            request.AddParameter("Username", aqUser); // adds to POST or URL querystring based on Method
-            request.AddParameter("EncryptedPassword", aqPswd);
-            request.AddParameter("Locale", "");
-
-            // Execute the request and get authentication token
-            IRestResponse restResponse = acquisitionClient.Execute(request);
-            authToken = restResponse.Content; // raw content as string
-            ValidateResponse(restResponse, "Connected to Aquarius");
-        }
-
-
-        /// <summary>
-        /// Invalidates the authentication token from ConnectToAquarius()
-        /// </summary>
-        private static void DisconnectFromAquarius()
-        {
-            var request = new RestRequest("session/", Method.DELETE);
-            IRestResponse restResponse = acquisitionClient.Execute(request);
-            //ValidateResponse(restResponse, "Disconnected from Aquarius");
-            logFile.Log(" Disconnected from Aquarius");
-            logFile.Log("-------------------------------------------");
-        }
-        
-
-        /// <summary>
         /// Attaches authentication token from ConnectToAquarius() to RestRequest 
         /// </summary>
         /// <param name="restRequest"></param>
         /// <returns></returns>
-        private static RestRequest AuthorizeRequest(RestRequest restRequest)
+        public static RestRequest AuthorizeRequest(RestRequest restRequest)
         {
             restRequest.AddHeader("x-authentication-token", authToken);
             return restRequest;
@@ -431,7 +395,7 @@ namespace HDB2AQDB
         /// <param name="successMessage"></param>
         /// <param name="failMessage"></param>
         /// <returns></returns>
-        private static bool ValidateResponse(IRestResponse restResponse, string successMessage, string failMessage = "")
+        public static bool ValidateResponse(IRestResponse restResponse, string successMessage, string failMessage = "")
         {
             int restStatusCode = (int)restResponse.StatusCode;
             if (restStatusCode < 400)
@@ -445,216 +409,57 @@ namespace HDB2AQDB
                 return false;
             }
         }
-
-
-        /// <summary>
-        /// Get TS items from AQ
-        /// </summary>
-        private static tsInventory GetAqTimeSeries(bool getPublishedTS = false)
-        {
-            // Get available Locations
-            var request = new RestRequest("GetTimeSeriesDescriptionList/", Method.GET);
-            if (getPublishedTS)
-            {
-                request.AddParameter("Publish", getPublishedTS);
-            }
-            request = AuthorizeRequest(request);
-            IRestResponse restResponse = publishClient.Execute(request);
-            ValidateResponse(restResponse, "List of Aquarius TS objects fetched");
-            tsInventory tsOut;
-            if (getPublishedTS) //return all tsitems
-            {
-                tsOut = JsonConvert.DeserializeObject<tsInventory>(restResponse.Content);                
-            }
-            else //filter tsitems needed for data transfer processing
-            {
-                tsOut = FilterAqTimeSeries(JsonConvert.DeserializeObject<tsInventory>(restResponse.Content));
-            }
-            return tsOut;
-        }
-
-
-        /// <summary>
-        /// Isolates only the AQTS items that meet processing requirements
-        /// </summary>
-        /// <param name="allTS"></param>
-        /// <returns></returns>
-        private static tsInventory FilterAqTimeSeries(tsInventory allTS)
-        {
-            tsInventory filteredTS = new tsInventory();
-            filteredTS.ResponseTime = allTS.ResponseTime;
-            filteredTS.ResponseVersion = allTS.ResponseVersion;
-            filteredTS.Summary = allTS.Summary;
-            List<tsItems> filteredList = new List<tsItems>();
-            foreach (var ts in allTS.TimeSeriesDescriptions)
-            {
-                // CHECK IF TS HAS AQ EXTENDED ATTRIBUTES AND IS A REFLECTED TS
-                var hdbSyncVars = ts.ExtendedAttributes;
-                if (hdbSyncVars[0].Value != null && hdbSyncVars[1].Value != null && hdbSyncVars[2].Value != null && ts.TimeSeriesType.ToLower() == "reflected")
-                {
-                    filteredList.Add(ts);                    
-                }
-            }
-            filteredTS.TimeSeriesDescriptions = filteredList;
-            return filteredTS;
-        }
-
-
-        /// <summary>
-        /// Get Approval Levels for AQTS
-        /// </summary>
-        private static tsCorrectedData GetAqTimeSeriesApprovals(string tsID, DateTime t1, DateTime t2)
-        {
-            // Get available Locations
-            var request = new RestRequest("GetTimeSeriesCorrectedData/", Method.GET);
-            request.AddParameter("TimeSeriesUniqueId", tsID);
-            request.AddParameter("QueryFrom", ConvertDateTimeJVS(t1));
-            request.AddParameter("QueryTo", ConvertDateTimeJVS(t2));
-            request.AddParameter("GetParts", "MetadataOnly");
-            request.AddParameter("ReturnFullCoverage", "true");
-
-            request = AuthorizeRequest(request);
-            IRestResponse restResponse = publishClient.Execute(request);
-            ValidateResponse(restResponse, "Approval Levels for " + tsID + " fetched");
-            return JsonConvert.DeserializeObject<tsCorrectedData>(restResponse.Content);
-        }
-
-
-        /// <summary>
-        /// Append Basic TS data for new values
-        /// </summary>
-        //private static void TimeSeriesAppend(string tsID)
-        //{
-        //    // Get HDB data
-        //    string dataPoints = GetSiteDataTypeData();
-
-        //    // Build API call
-        //    var request = new RestRequest("timeseries/" + tsID + @"/append", Method.POST);
-        //    request.AddParameter("UniqueId", tsID);
-        //    request.AddParameter("Points", dataPoints);
-
-        //    request = AuthorizeRequest(request);
-        //    IRestResponse restResponse = acquisitionClient.Execute(request);
-        //    // Log append request
-        //    appendRequestIds.Add(restResponse);
-        //    ValidateResponse(restResponse, "Write to Aquarius DB in progress");
-        //}
-
-
-        /// <summary>
-        /// Append Basic TS data and overwrite existing values
-        /// </summary>
-        //private static void TimeSeriesOverWriteAppend(string tsID)
-        //{
-        //    bool getHdbUpdates = true;
-        //    // Get HDB data
-        //    string dataPoints = GetSiteDataTypeData(getHdbUpdates);
-
-        //    // Build API call
-        //    //var request = new RestRequest("timeseries/" + tsID + @"/overwriteappend", Method.POST);
-        //    var request = new RestRequest("timeseries/" + tsID + @"/append", Method.POST);
-        //    request.AddParameter("UniqueId", tsID);
-        //    request.AddParameter("Points", dataPoints);
-        //    //request.AddParameter("TimeRange", "Interval");
-
-        //    request = AuthorizeRequest(request);
-        //    IRestResponse restResponse = acquisitionClient.Execute(request);
-        //    // Log append request
-        //    appendRequestIds.Add(restResponse);
-        //    ValidateResponse(restResponse, "Write to Aquarius DB in progress");
-        //}
-
-
-        /// <summary>
-        /// Append Reflected TS data and overwrite existing values
-        /// </summary>
-        private static void ReflectedTimeSeriesOverWriteAppend(string tsID, bool getHdbUpdates = false)
-        {
-            // Get HDB data
-            string tRange = "";
-            string dataPoints = "";
-            GetSiteDataTypeData(out dataPoints, out tRange, getHdbUpdates);
-
-            if (dataPoints == "[{}]")
-            {
-                logFile.Log(" FAIL HDB Error: No data found for " + sdID + " in " + hdb);
-                failCount++;
-            }
-            else
-            {
-                // Build API call
-                var request = new RestRequest("timeseries/" + tsID + @"/reflected", Method.POST);
-                request.AddParameter("UniqueId", tsID);
-                request.AddParameter("Points", dataPoints);
-                request.AddParameter("TimeRange", tRange);
-
-                request = AuthorizeRequest(request);
-                IRestResponse restResponse = acquisitionClient.Execute(request);
-                // Log append request
-                appendRequestIds.Add(restResponse);
-                ValidateResponse(restResponse, "Write to Aquarius DB in progress");
-            }
-        }
-
-
-        /// <summary>
-        /// Check Append status given API response
-        /// </summary>
-        private static int[] TimeSeriesAppendStatus(IRestResponse restResponse)
-        {
-            int[] output = new int[2];
-            // output[0] = response code
-            // output[1] = points appended
-
-            var appendResponse = JsonConvert.DeserializeObject<tsAppendReponse>(restResponse.Content);
-            if (appendResponse.AppendRequestIdentifier == null) //no data found in HDB
-            {
-                output[0] = 400;
-                output[1] = 0;
-            }
-            else
-            {
-                // Build API call
-                var request = new RestRequest("timeseries/appendstatus/" + appendResponse.AppendRequestIdentifier,
-                    Method.GET);
-
-                request = AuthorizeRequest(request);
-                restResponse = acquisitionClient.Execute(request);
-                var appendStatus = JsonConvert.DeserializeObject<tsAppendStatus>(restResponse.Content);
-
-                output[0] = (int)restResponse.StatusCode;
-                output[1] = Convert.ToInt32(appendStatus.NumberOfPointsAppended);
-            }
-
-            return output;
-        }
-
+        
 
         /// <summary>
         /// Check Append Request IDs and populate log file
         /// </summary>
-        private static void CheckAllAppendStatus()
+        public static void CheckAllAppendStatus()
         {
             // SLEEP FOR 10 SECONDS BEFORE CHECKING APPEND STATUS
             System.Threading.Thread.Sleep((int)System.TimeSpan.FromSeconds(10).TotalMilliseconds);
 
             foreach (var appendItem in appendRequestIds)
             {
-                var result = TimeSeriesAppendStatus(appendItem);
+                var result = AquQuery.TimeSeriesAppendStatus(appendItem);
                 if (result[0] < 400)
                 { okCount++; }
                 else
                 { failCount++; }
                 appendCount += result[1];
             }
-            logFile.Log(" APPEND STATUS | " + okCount + " SDIDs Succeeded | " + failCount + " SDIDs Failed | " + appendCount + " Total points appended");
+            Program.logFile.Log(" APPEND STATUS | " + okCount + " SDIDs Succeeded | " + failCount + " SDIDs Failed | " + appendCount + " Total points appended");
         }
+
+
+        /// <summary>
+        /// Converts UTC-07 to UTC+00
+        /// </summary>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        public static DateTime ConvertUtcMinus07(DateTime t)
+        {
+            return t.AddHours(utcConversion);
+        }
+
+
+        /// <summary>
+        /// Converts to AQ JVS Format
+        /// </summary>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        public static string ConvertDateTimeJVS(DateTime t)
+        {
+            var tOut = t.ToString("yyyy-MM-dd") + "T" + t.ToString("HH:mm") + ":00.0000000+00:00";
+            return tOut;
+        }
+
 
         /// <summary>
         /// Query HDB data for SDID
         /// </summary>
         /// <returns></returns>
-        private static void GetSiteDataTypeData(out string data, out string tRange, bool update = false)
+        public static void GetSiteDataTypeData(out string data, out string tRange, bool update = false)
         {
             // Old API format
             //byte[] theData = Encoding.ASCII.GetBytes(
@@ -690,7 +495,7 @@ namespace HDB2AQDB
                 dTab = HdbQuery.GetHdbData(hdb, sdID, "instant", startDate, endDate);
                 utcConversion = 7; // Data from the INSTANT tables need an 8 for UTC-07 to UTC+00 conversion
             }
-            
+
 
             //if (update)
             //{
@@ -701,25 +506,28 @@ namespace HDB2AQDB
             //    dTab = HdbQuery.GetHdbData(hdb, sdID, interval, startDate, endDate);
             //}
             //var dTab = HdbQuery.GetHdbData(hdb, sdID, interval, startDate, endDate, true);
-            data = "";            
-            
+            data = "";
+
             if (dTab.Rows.Count == 0) // No data in HDB
             {
                 data = "[{}]";
-                tRange = @"{""Start"":""" + ConvertUtcMinus07(DateTime.Now.AddHours(-1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
-                            @""",""End"":""" + ConvertUtcMinus07(DateTime.Now.AddHours(1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
+                tRange = @"{""Start"":""" + Program.ConvertUtcMinus07(DateTime.Now.AddHours(-1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
+                            @""",""End"":""" + Program.ConvertUtcMinus07(DateTime.Now.AddHours(1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
                             @"""}";
-            } 
+
+                Program.logFile.Log(" FAIL HDB Error: No data found for " + sdID + " in " + hdb);
+                failCount++;
+            }
             else
             {
                 data = @"[";
                 foreach (DataRow row in dTab.Rows)
                 {
-                    DateTime t = ConvertUtcMinus07(DateTime.Parse(row[0].ToString()));
+                    DateTime t = Program.ConvertUtcMinus07(DateTime.Parse(row[0].ToString()));
                     double val = double.Parse(row[1].ToString());
                     data = data + @"{GradeCode:0,Qualifiers:[],Time:" +
                         //t.ToString("s", System.Globalization.CultureInfo.InvariantCulture) + // for Basic TS
-                        ConvertDateTimeJVS(t) + // for Reflected TS
+                        Program.ConvertDateTimeJVS(t) + // for Reflected TS
                         @",Value:" + val + "},";
                     pointCount++;
                     //Console.WriteLine(t.ToString() + " - " + ConvertDateTimeJVS(t));
@@ -727,33 +535,10 @@ namespace HDB2AQDB
                 data = data.Remove(data.Length - 1); //remove last comma from loop
                 data = data + "]";
 
-                tRange = @"{""Start"":""" + ConvertUtcMinus07(DateTime.Parse(dTab.Rows[0][0].ToString()).AddMinutes(-1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
-                            @""",""End"":""" + ConvertUtcMinus07(DateTime.Parse(dTab.Rows[dTab.Rows.Count - 1][0].ToString()).AddMinutes(1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
+                tRange = @"{""Start"":""" + Program.ConvertUtcMinus07(DateTime.Parse(dTab.Rows[0][0].ToString()).AddMinutes(-1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
+                            @""",""End"":""" + Program.ConvertUtcMinus07(DateTime.Parse(dTab.Rows[dTab.Rows.Count - 1][0].ToString()).AddMinutes(1)).ToString("s", System.Globalization.CultureInfo.InvariantCulture) +
                             @"""}";
             }
-        }
-        
-
-        /// <summary>
-        /// Converts UTC-07 to UTC+00
-        /// </summary>
-        /// <param name="t"></param>
-        /// <returns></returns>
-        private static DateTime ConvertUtcMinus07(DateTime t)
-        {
-            return t.AddHours(utcConversion);
-        }
-
-
-        /// <summary>
-        /// Converts to AQ JVS Format
-        /// </summary>
-        /// <param name="t"></param>
-        /// <returns></returns>
-        private static string ConvertDateTimeJVS(DateTime t)
-        {
-            var tOut = t.ToString("yyyy-MM-dd") + "T" + t.ToString("HH:mm") + ":00.0000000+00:00";
-            return tOut;
         }
 
 
@@ -776,7 +561,7 @@ namespace HDB2AQDB
                 //if (ts.Label.Contains("Published |"))
                 //{
                 //get approvals
-                var tsApprovals = GetAqTimeSeriesApprovals(ts.UniqueId, t1, t2);
+                var tsApprovals = AquQuery.GetAqTimeSeriesApprovals(ts.UniqueId, t1, t2);
                 Console.WriteLine("Processing " + tsApprovals.LocationIdentifier + " | " + tsApprovals.Parameter + @""",");
                 //build approvals table
                 var dTab = new DataTable();

@@ -160,65 +160,6 @@ namespace HDB2AQDB
         }
 
 
-        public static DataTable GetHdbInfo(string hdb, string sdiValue)
-        {
-            DataTable dTab = new DataTable();
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Connect to HDB Server
-            dbServer = hdb;
-            var oDB = ConnectHDB();
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Get ODB data
-            /* THIS IS THE SQL THAT IS RUN BY THIS METHOD
-                    select HDB_SITE_DATATYPE.SITE_DATATYPE_ID,
-                    HDB_SITE.SITE_ID,
-                    HDB_DATATYPE.DATATYPE_ID,
-                    HDB_SITE.SITE_COMMON_NAME,
-                    HDB_SITE.SITE_NAME,
-                    HDB_OBJECTTYPE.OBJECTTYPE_NAME,
-                    HDB_DATATYPE.DATATYPE_NAME,
-                    HDB_DATATYPE.PHYSICAL_QUANTITY_NAME,
-                    HDB_UNIT.UNIT_COMMON_NAME,
-                    HDB_SITE.LAT,
-                    HDB_SITE.LONGI,
-                    HDB_STATE.STATE_CODE, 
-                    HDB_SITE.DB_SITE_CODE
-                    from HDB_SITE 
-                    inner join HDB_SITE_DATATYPE on HDB_SITE.SITE_ID = HDB_SITE_DATATYPE.SITE_ID 
-                    inner join HDB_DATATYPE on HDB_SITE_DATATYPE.DATATYPE_ID = HDB_DATATYPE.DATATYPE_ID 
-                    inner join HDB_UNIT on HDB_DATATYPE.UNIT_ID = HDB_UNIT.UNIT_ID 
-                    inner join HDB_STATE on HDB_SITE.STATE_ID = HDB_STATE.STATE_ID 
-                    inner join HDB_OBJECTTYPE on HDB_SITE.OBJECTTYPE_ID = HDB_OBJECTTYPE.OBJECTTYPE_ID 
-                    where HDB_SITE_DATATYPE.SITE_DATATYPE_ID in (1930);
-             */
-            var sql = "select HDB_SITE_DATATYPE.SITE_DATATYPE_ID, " +
-                    "HDB_SITE.SITE_ID, " +
-                    "HDB_DATATYPE.DATATYPE_ID, " +
-                    "HDB_SITE.SITE_COMMON_NAME, " +
-                    "HDB_SITE.SITE_NAME, " +
-                    "HDB_OBJECTTYPE.OBJECTTYPE_NAME, " +
-                    "HDB_DATATYPE.DATATYPE_NAME, " +
-                    "HDB_DATATYPE.PHYSICAL_QUANTITY_NAME, " +
-                    "HDB_UNIT.UNIT_COMMON_NAME, " +
-                    "HDB_SITE.LAT, " +
-                    "HDB_SITE.LONGI, " +
-                    "HDB_STATE.STATE_CODE, " +
-                    "HDB_SITE.DB_SITE_CODE " +
-                    "from HDB_SITE " +
-                    "inner join HDB_SITE_DATATYPE on HDB_SITE.SITE_ID = HDB_SITE_DATATYPE.SITE_ID " +
-                    "inner join HDB_DATATYPE on HDB_SITE_DATATYPE.DATATYPE_ID = HDB_DATATYPE.DATATYPE_ID " +
-                    "inner join HDB_UNIT on HDB_DATATYPE.UNIT_ID = HDB_UNIT.UNIT_ID " +
-                    "inner join HDB_STATE on HDB_SITE.STATE_ID = HDB_STATE.STATE_ID " +
-                    "inner join HDB_OBJECTTYPE on HDB_SITE.OBJECTTYPE_ID = HDB_OBJECTTYPE.OBJECTTYPE_ID " +
-                    "where HDB_SITE_DATATYPE.SITE_DATATYPE_ID in (" + sdiValue + ")";
-            dTab = queryHdbDataUsingSQL(oDB, sql);
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Disconnect from HDB
-            DisconnectHDB(oDB);
-            return dTab;
-        }
-
-
         /// <summary>
         /// Gets ODB data given an sql query and returns a DataTable with a common date range and sdi columns
         /// </summary>
@@ -265,8 +206,8 @@ namespace HDB2AQDB
             cmd.Dispose();
             return dTab;
         }
-        
-        
+
+
 
     }
 }
