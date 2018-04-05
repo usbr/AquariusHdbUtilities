@@ -186,125 +186,105 @@ namespace HDB2AQDB
                 #region
                 foreach (var ts in tsItems.TimeSeriesDescriptions)
                 {
-                    // CHECK IF TS HAS AQ EXTENDED ATTRIBUTES
+                    // GET INPUTS FROM AQDB REQUIRED BY HDB SYNC PROCESS
                     var hdbSyncVars = ts.ExtendedAttributes;
-                    if (hdbSyncVars[0].Value != null && hdbSyncVars[1].Value != null && hdbSyncVars[2].Value != null && ts.TimeSeriesType.ToLower() == "reflected")
+                    hdb = hdbSyncVars[0].Value;
+                    string syncProc = hdbSyncVars[1].Value;
+                    sdID = hdbSyncVars[2].Value;
+
+                    // CHECK FOR REQUIRED AQDB VARIABLES AND PROCESS
+                    if (hdbValues.Contains(hdb) && processValues.Contains(syncProc) && Regex.IsMatch(sdID, @"^\d+$"))
                     {
-                        // GET INPUTS FROM AQDB REQUIRED BY HDB SYNC PROCESS
-                        hdb = hdbSyncVars[0].Value;
-                        string syncProc = hdbSyncVars[1].Value;
-                        sdID = hdbSyncVars[2].Value;
+                        // GET TS INTERVAL FROM AQDB
+                        interval = ts.ComputationPeriodIdentifier;
+                        if (interval == "Hourly")
+                        { interval = "HOUR"; }
+                        else
+                        { interval = "DAY"; }
 
-                        // CHECK FOR REQUIRED AQDB VARIABLES AND PROCESS
-                        if (hdbValues.Contains(hdb) && processValues.Contains(syncProc) && Regex.IsMatch(sdID, @"^\d+$"))
+                        // BUILD QUERY DATES GIVEN INTERVAL
+                        if (interval == "HOUR")
                         {
-                            // GET TS INTERVAL FROM AQDB
-                            interval = ts.ComputationPeriodIdentifier;
-                            if (interval == "Hourly")
-                            { interval = "HOUR"; }
-                            else
-                            { interval = "DAY"; }
+                            startDate = DateTime.Now.AddDays(-1);
+                            endDate = DateTime.Now;
+                        }
+                        else
+                        {
+                            startDate = DateTime.Now.AddDays(-7);
+                            endDate = DateTime.Now;
+                        }
+                        logFile.Log(" Processing SDID#" + sdID);
 
-                            // BUILD QUERY DATES GIVEN INTERVAL
-                            if (interval == "HOUR")
+                        // CHECK IF AQ RawStartTime EXISTS -- NEW TS IF !EXISTS SO TRY TO POPULATE BACK TO 01JAN2012
+                        if (ts.RawStartTime == null && !args.Contains("manual"))
+                        {
+                            // Hard coded default start date per BHO
+                            startDate = new DateTime(2012, 1, 1, 0, 0, 0);
+                            // Transfer 3-year chunks of data
+                            if ((endDate.Year - startDate.Year) >= 3)
                             {
-                                startDate = DateTime.Now.AddDays(-1);
-                                endDate = DateTime.Now;
-                            }
-                            else
-                            {
-                                startDate = DateTime.Now.AddDays(-7);
-                                endDate = DateTime.Now;
-                            }
-                            logFile.Log(" Processing SDID#" + sdID);
-
-                            // CHECK IF AQ RawStartTime EXISTS -- NEW TS IF !EXISTS SO TRY TO POPULATE BACK TO 01JAN2012
-                            if (ts.RawStartTime == null && !args.Contains("manual"))
-                            {
-                                // Hard coded default start date per BHO
-                                startDate = new DateTime(2012, 1, 1, 0, 0, 0);
-                                // Transfer 3-year chunks of data
-                                if ((endDate.Year - startDate.Year) >= 3)
+                                var origStart = startDate;
+                                var origEnd = endDate;
+                                var chunkCount = System.Math.Ceiling((endDate.Year - startDate.Year) / 3.0);
+                                for (int i = 0; i < chunkCount; i++)
                                 {
-                                    var origStart = startDate;
-                                    var origEnd = endDate;
-                                    var chunkCount = System.Math.Ceiling((endDate.Year - startDate.Year) / 3.0);
-                                    for (int i = 0; i < chunkCount; i++)
-                                    {
-                                        startDate = origStart.AddYears(3 * i).AddDays(-1);
-                                        endDate = origStart.AddYears(3 + (3 * i));
-                                        if (startDate > origEnd)
-                                        { endDate = origEnd; }
-                                        ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
-                                    }
-                                    startDate = origStart;
-                                    endDate = origEnd;
-                                }
-                                else
-                                {
+                                    startDate = origStart.AddYears(3 * i).AddDays(-1);
+                                    endDate = origStart.AddYears(3 + (3 * i));
+                                    if (startDate > origEnd)
+                                    { endDate = origEnd; }
                                     ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
                                 }
+                                startDate = origStart;
+                                endDate = origEnd;
                             }
-                            // TS EXISTS SO ONLY GET UPDATED DATA
                             else
                             {
-                                if (args.Contains("manual"))
+                                ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
+                            }
+                        }
+                        // TS EXISTS SO ONLY GET UPDATED DATA
+                        else
+                        {
+                            if (args.Contains("manual"))
+                            {
+                                // [JR] MANUAL OVERRRIDE TO FILL IN SPECIFIC DATES
+                                //if (sdID == "7776" || sdID == "8018")
+                                if (argList.Length == 0 || !args.Contains("sdid") || !args.Contains("tStart"))
                                 {
-                                    // [JR] MANUAL OVERRRIDE TO FILL IN SPECIFIC DATES
-                                    //if (sdID == "7776" || sdID == "8018")
-                                    if (argList.Length == 0 || !args.Contains("sdid") || !args.Contains("tStart"))
-                                    {
-                                        ShowHelp();
-                                        return;
-                                    }
-                                    else
-                                    {
-                                        //startDate = new DateTime(2017, 4, 27, 0, 0, 0);
-                                        var sdIDCheck = args["sdid"].ToString();
-                                        if (sdID == sdIDCheck || sdIDCheck.ToLower() == "all")
-                                        {
-                                            startDate = DateTime.Parse(args["tStart"].ToString());
-                                            try
-                                            {
-                                                endDate = DateTime.Parse(args["tEnd"].ToString());
-                                            }
-                                            catch
-                                            {
-                                                endDate = DateTime.Now;
-                                            }
-                                            Console.Write("Filling SDID " + sdID + "... ");
-                                            ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
-                                            Console.WriteLine("Done!");
-                                        }
-                                    }
-                                }
-                                else if (args.Contains("auto"))
-                                {
-                                    ReflectedTimeSeriesOverWriteAppend(ts.UniqueId, true);
+                                    ShowHelp();
+                                    return;
                                 }
                                 else
                                 {
-
+                                    //startDate = new DateTime(2017, 4, 27, 0, 0, 0);
+                                    var sdIDCheck = args["sdid"].ToString();
+                                    if (sdID == sdIDCheck || sdIDCheck.ToLower() == "all")
+                                    {
+                                        startDate = DateTime.Parse(args["tStart"].ToString());
+                                        try
+                                        { endDate = DateTime.Parse(args["tEnd"].ToString()); }
+                                        catch
+                                        { endDate = DateTime.Now; }
+                                        Console.Write("Filling SDID " + sdID + "... ");
+                                        ReflectedTimeSeriesOverWriteAppend(ts.UniqueId);
+                                        Console.WriteLine("Done!");
+                                    }
                                 }
                             }
-                        } //END AQTS PROCESSING
-                    } //END AQ EXTENDED ATTRIBUTE CHECK
+                            else if (args.Contains("auto"))
+                            {
+                                ReflectedTimeSeriesOverWriteAppend(ts.UniqueId, true);
+                            }
+                            else
+                            {
+
+                            }
+                        }
+                    } //END AQTS PROCESSING
                 } //LOOP TO NEXT AQTS OBJECT
 
-                // SLEEP FOR 10 SECONDS BEFORE CHECKING APPEND STATUS
-                System.Threading.Thread.Sleep((int)System.TimeSpan.FromSeconds(10).TotalMilliseconds);
-
                 // CHECK STATUS OF APPEND REQUESTS
-                foreach (var appendItem in appendRequestIds)
-                {
-                    var result = TimeSeriesAppendStatus(appendItem);
-                    if (result[0] < 400)
-                    { okCount++; }
-                    else
-                    { failCount++; }
-                    appendCount += result[1];
-                }
-                logFile.Log(" APPEND STATUS | " + okCount + " SDIDs Succeeded | " + failCount + " SDIDs Failed | " + appendCount + " Total points appended");
+                CheckAllAppendStatus();
                 #endregion
             }
             ///////////////////////////////////////////////////////////////////////
@@ -314,57 +294,41 @@ namespace HDB2AQDB
                 #region
                 foreach (var ts in tsItems.TimeSeriesDescriptions)
                 {
-                    // CHECK IF TS HAS AQ EXTENDED ATTRIBUTES
+                    // GET INPUTS FROM AQDB REQUIRED BY HDB SYNC PROCESS
                     var hdbSyncVars = ts.ExtendedAttributes;
-                    if (hdbSyncVars[0].Value != null && hdbSyncVars[1].Value != null && hdbSyncVars[2].Value != null && ts.TimeSeriesType.ToLower() == "reflected")
+                    hdb = hdbSyncVars[0].Value;
+                    string syncProc = hdbSyncVars[1].Value;
+                    sdID = hdbSyncVars[2].Value;
+
+                    // CHECK FOR REQUIRED AQDB VARIABLES AND PROCESS
+                    if (hdbValues.Contains(hdb) && processValues.Contains(syncProc) && Regex.IsMatch(sdID, @"^\d+$"))
                     {
-                        // GET INPUTS FROM AQDB REQUIRED BY HDB SYNC PROCESS
-                        hdb = hdbSyncVars[0].Value;
-                        string syncProc = hdbSyncVars[1].Value;
-                        sdID = hdbSyncVars[2].Value;
+                        // GET TS INTERVAL FROM AQDB
+                        interval = ts.ComputationPeriodIdentifier;
+                        if (interval == "Hourly")
+                        { interval = "HOUR"; }
+                        else
+                        { interval = "DAY"; }
 
-                        // CHECK FOR REQUIRED AQDB VARIABLES AND PROCESS
-                        if (hdbValues.Contains(hdb) && processValues.Contains(syncProc) && Regex.IsMatch(sdID, @"^\d+$"))
+                        // BUILD QUERY DATES GIVEN INTERVAL
+                        if (interval == "HOUR")
                         {
-                            // GET TS INTERVAL FROM AQDB
-                            interval = ts.ComputationPeriodIdentifier;
-                            if (interval == "Hourly")
-                            { interval = "HOUR"; }
-                            else
-                            { interval = "DAY"; }
-
-                            // BUILD QUERY DATES GIVEN INTERVAL
-                            if (interval == "HOUR")
-                            {
-                                startDate = DateTime.Now.AddDays(-1);
-                                endDate = DateTime.Now;
-                            }
-                            else
-                            {
-                                startDate = DateTime.Now.AddDays(-7);
-                                endDate = DateTime.Now;
-                            }
-                            logFile.Log(" Processing SDID#" + sdID);
+                            startDate = DateTime.Now.AddDays(-1);
+                            endDate = DateTime.Now;
+                        }
+                        else
+                        {
+                            startDate = DateTime.Now.AddDays(-7);
+                            endDate = DateTime.Now;
+                        }
+                        logFile.Log(" Processing SDID#" + sdID);
 
 
-                        } //END AQTS PROCESSING
-                    } //END AQ EXTENDED ATTRIBUTE CHECK
+                    } //END AQTS PROCESSING
                 } //LOOP TO NEXT AQTS OBJECT
 
-                // SLEEP FOR 10 SECONDS BEFORE CHECKING APPEND STATUS
-                System.Threading.Thread.Sleep((int)System.TimeSpan.FromSeconds(10).TotalMilliseconds);
-
                 // CHECK STATUS OF APPEND REQUESTS
-                foreach (var appendItem in appendRequestIds)
-                {
-                    var result = TimeSeriesAppendStatus(appendItem);
-                    if (result[0] < 400)
-                    { okCount++; }
-                    else
-                    { failCount++; }
-                    appendCount += result[1];
-                }
-                logFile.Log(" APPEND STATUS | " + okCount + " SDIDs Succeeded | " + failCount + " SDIDs Failed | " + appendCount + " Total points appended");
+                CheckAllAppendStatus();
                 #endregion
 
             }
@@ -497,7 +461,42 @@ namespace HDB2AQDB
             request = AuthorizeRequest(request);
             IRestResponse restResponse = publishClient.Execute(request);
             ValidateResponse(restResponse, "List of Aquarius TS objects fetched");
-            return JsonConvert.DeserializeObject<tsInventory>(restResponse.Content);
+            tsInventory tsOut;
+            if (getPublishedTS) //return all tsitems
+            {
+                tsOut = JsonConvert.DeserializeObject<tsInventory>(restResponse.Content);                
+            }
+            else //filter tsitems needed for data transfer processing
+            {
+                tsOut = FilterAqTimeSeries(JsonConvert.DeserializeObject<tsInventory>(restResponse.Content));
+            }
+            return tsOut;
+        }
+
+
+        /// <summary>
+        /// Isolates only the AQTS items that meet processing requirements
+        /// </summary>
+        /// <param name="allTS"></param>
+        /// <returns></returns>
+        private static tsInventory FilterAqTimeSeries(tsInventory allTS)
+        {
+            tsInventory filteredTS = new tsInventory();
+            filteredTS.ResponseTime = allTS.ResponseTime;
+            filteredTS.ResponseVersion = allTS.ResponseVersion;
+            filteredTS.Summary = allTS.Summary;
+            List<tsItems> filteredList = new List<tsItems>();
+            foreach (var ts in allTS.TimeSeriesDescriptions)
+            {
+                // CHECK IF TS HAS AQ EXTENDED ATTRIBUTES AND IS A REFLECTED TS
+                var hdbSyncVars = ts.ExtendedAttributes;
+                if (hdbSyncVars[0].Value != null && hdbSyncVars[1].Value != null && hdbSyncVars[2].Value != null && ts.TimeSeriesType.ToLower() == "reflected")
+                {
+                    filteredList.Add(ts);                    
+                }
+            }
+            filteredTS.TimeSeriesDescriptions = filteredList;
+            return filteredTS;
         }
 
 
@@ -630,6 +629,26 @@ namespace HDB2AQDB
             return output;
         }
 
+
+        /// <summary>
+        /// Check Append Request IDs and populate log file
+        /// </summary>
+        private static void CheckAllAppendStatus()
+        {
+            // SLEEP FOR 10 SECONDS BEFORE CHECKING APPEND STATUS
+            System.Threading.Thread.Sleep((int)System.TimeSpan.FromSeconds(10).TotalMilliseconds);
+
+            foreach (var appendItem in appendRequestIds)
+            {
+                var result = TimeSeriesAppendStatus(appendItem);
+                if (result[0] < 400)
+                { okCount++; }
+                else
+                { failCount++; }
+                appendCount += result[1];
+            }
+            logFile.Log(" APPEND STATUS | " + okCount + " SDIDs Succeeded | " + failCount + " SDIDs Failed | " + appendCount + " Total points appended");
+        }
 
         /// <summary>
         /// Query HDB data for SDID
